@@ -6,6 +6,7 @@ import com.google.common.collect.ClassToInstanceMap;
 
 import de.fhg.iais.roberta.bean.IProjectBean;
 import de.fhg.iais.roberta.bean.UsedHardwareBean;
+import de.fhg.iais.roberta.syntax.Phrase;
 import de.fhg.iais.roberta.syntax.lang.blocksequence.MainTask;
 import de.fhg.iais.roberta.syntax.lang.expr.Binary;
 import de.fhg.iais.roberta.syntax.lang.expr.BoolConst;
@@ -60,6 +61,7 @@ import de.fhg.iais.roberta.syntax.lang.stmt.StmtTextComment;
 import de.fhg.iais.roberta.syntax.lang.stmt.WaitStmt;
 import de.fhg.iais.roberta.syntax.lang.stmt.WaitTimeStmt;
 import de.fhg.iais.roberta.typecheck.BlocklyType;
+import de.fhg.iais.roberta.typecheck.NepoInfo;
 import de.fhg.iais.roberta.visitor.lang.ILanguageVisitor;
 
 public abstract class AbstractCollectorVisitor implements ILanguageVisitor<Void> {
@@ -114,10 +116,8 @@ public abstract class AbstractCollectorVisitor implements ILanguageVisitor<Void>
 
     @Override
     public Void visitRgbColor(RgbColor<Void> rgbColor) {
-        rgbColor.getR().accept(this);
-        rgbColor.getG().accept(this);
-        rgbColor.getB().accept(this);
-        rgbColor.getA().accept(this);
+        requiredComponentVisited(rgbColor, rgbColor.getR(), rgbColor.getG(), rgbColor.getB());
+        optionalComponentVisited(rgbColor.getA());
         return null;
     }
 
@@ -140,7 +140,7 @@ public abstract class AbstractCollectorVisitor implements ILanguageVisitor<Void>
             || var.getVarType().equals(BlocklyType.ARRAY_STRING) ) {
             this.getBuilder(UsedHardwareBean.Builder.class).setListsUsed(true);
         }
-        var.getValue().accept(this);
+        requiredComponentVisited(var, var.getValue());
         this.getBuilder(UsedHardwareBean.Builder.class).addGlobalVariable(var.getName());
         this.getBuilder(UsedHardwareBean.Builder.class).addDeclaredVariable(var.getName());
         return null;
@@ -450,5 +450,32 @@ public abstract class AbstractCollectorVisitor implements ILanguageVisitor<Void>
         int count;
         count = this.waitsInLoops.get(this.loopCounter);
         this.waitsInLoops.put(this.loopCounter, ++count);
+    }
+
+    /**
+     * for the superPhrase check, that subPhrases are not empty. If true, visit the subPhrases, otherwise add error information to the superPhrase.
+     *
+     * @param superPhrases phrase, whose components should be checked and visited
+     * @param subPhrases the component of superPhrase to be checked and visited
+     */
+    protected void requiredComponentVisited(Phrase<Void> superPhrase, Phrase<Void>... subPhrases) {
+        for ( Phrase<Void> subPhrase : subPhrases ) {
+            if ( subPhrase instanceof EmptyExpr<?> ) {
+                superPhrase.addInfo(NepoInfo.error("block is missing"));
+            } else {
+                subPhrase.accept(this);
+            }
+        }
+    }
+
+    /**
+     * if the subPhrase is not empty, visit the subPhrase
+     *
+     * @param subPhrase
+     */
+    protected void optionalComponentVisited(Phrase<Void> subPhrase) {
+        if ( !(subPhrase instanceof EmptyExpr<?>) ) {
+            subPhrase.accept(this);
+        }
     }
 }
